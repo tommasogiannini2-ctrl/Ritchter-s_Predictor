@@ -1,9 +1,9 @@
 import pandas as pd
 import os
 from abc import ABC, abstractmethod
+import time
 
 # --- 1. DEFINIZIONE DELLA FACTORY ---
-
 class AbstractOpener(ABC):
     def open(self, dataframe_path: str) -> pd.DataFrame:
         if not os.path.exists(dataframe_path):
@@ -42,7 +42,6 @@ def scegli_opener(dataframe_path: str) -> AbstractOpener:
             raise RuntimeError(f"Tipo di file non supportato: {ext}")
 
 # --- 2. CLASSE PREPROCESSING ---
-
 class Preprocessing:
     """
     Classe incaricata della pulizia e preparazione del dataset.
@@ -55,19 +54,138 @@ class Preprocessing:
         """
         Punto di ingresso per tutte le operazioni di pulizia.
         """
-        # Qui in futuro chiamerai i metodi di pulizia:
+        print("\nAvvio Preprocessing...")
         self.df = self.elimina_duplicati(self.df)
+        self.df = self.rimuovi_outlier_strutturali(self.df)
+        self.df = self.gestisci_valori_mancanti(self.df)
         return self.df
 
-        # Metodo per eliminare duplicati
+    # Metodo per eliminare duplicati
     def elimina_duplicati(self, dati):
         dati = dati.drop_duplicates()
         # Riassegna gli indici dopo l'eliminazione
         dati = dati.reset_index(drop=True)
         return dati
 
-# --- 3. MAIN SCRIPT ---
+    def gestisci_valori_mancanti(self, dati):
+        """Gestione interattiva dei valori nulli (NaN)."""
+        n = dati.isnull().sum().sum()
 
+        while n > 0:
+            print("\nDato che sono stati trovati valori mancanti, scegli un'operazione di pulizia:")
+            print("1. Eliminazione del record")
+            print("2. Imputazione univariata (media per ogni colonna numerica)")
+            print("3. Imputazione multivariata (KNN Imputer)")
+            print("4. Esci senza modifiche")
+
+            try:
+                choice = int(input("Inserisci la tua scelta (1-4): "))
+            except ValueError:
+                print("Scelta non valida. Inserisci un numero tra 1 e 4.")
+                time.sleep(1)
+                continue
+
+            if choice not in [1, 2, 3, 4]:
+                print("Scelta non valida. Riprova.")
+                time.sleep(1)
+                continue
+
+            if choice == 1:
+                dati.dropna(inplace=True)
+                print("Righe con valori mancanti eliminate con successo!")
+
+            elif choice == 2:
+                # Imputazione con la media su tutte le colonne numeriche che hanno NaN
+                numeric_cols_with_nan = dati.select_dtypes(include='number').columns[
+                    dati.select_dtypes(include='number').isnull().any()
+                ]
+                for col in numeric_cols_with_nan:
+                    col_mean = dati[col].mean()
+                    dati[col].fillna(col_mean, inplace=True)
+                print(f"Imputazione univariata eseguita su colonne: {list(numeric_cols_with_nan)}")
+
+            elif choice == 3:
+                from sklearn.impute import KNNImputer
+                numeric_cols = dati.select_dtypes(include='number').columns
+                imputer = KNNImputer(n_neighbors=5)
+                dati[numeric_cols] = imputer.fit_transform(dati[numeric_cols])
+                print("Imputazione multivariata (KNN) eseguita con successo!")
+
+            elif choice == 4:
+                print("Uscita senza modifiche.")
+                break
+
+            # Ricalcola n dopo ogni operazione per decidere se uscire dal loop
+            n = dati.isnull().sum().sum()
+            if n == 0:
+                print("Nessun valore mancante rimasto. Pulizia completata!")
+
+        return dati
+
+    def rimuovi_outlier_strutturali(self, dati):
+        """
+        Rimuove record che non rispettano i domini di valore attesi.
+        Utile per pulire errori di inserimento dati.
+        """
+        print("\n--- CONTROLLO OUTLIER ---")
+
+        # Valori attesi per ogni colonna categorica/binaria
+        valid_values = {
+            'land_surface_condition': ['n', 'o', 't'],
+            'foundation_type': ['h', 'i', 'r', 'u', 'w'],
+            'roof_type': ['n', 'q', 'x'],
+            'ground_floor_type': ['f', 'm', 'v', 'x', 'z'],
+            'other_floor_type': ['j', 's', 'q', 'x'],
+            'position': ['j', 's', 'o', 't'],
+            'plan_configuration': ['a', 'c', 'd', 'f', 'm', 'n', 'o', 'q', 's', 'u'],
+            'legal_ownership_status': ['a', 'r', 'v', 'w'],
+            'has_superstructure_adobe_mud': [0, 1],
+            'has_superstructure_mud_mortar_stone': [0, 1],
+            'has_superstructure_stone_flag': [0, 1],
+            'has_superstructure_cement_mortar_stone': [0, 1],
+            'has_superstructure_mud_mortar_brick': [0, 1],
+            'has_superstructure_cement_mortar_brick': [0, 1],
+            'has_superstructure_timber': [0, 1],
+            'has_superstructure_rc_non_engineered': [0, 1],
+            'has_superstructure_rc_engineered': [0, 1],
+            'has_superstructure_other': [0, 1],
+            'has_secondary_use': [0, 1],
+            'has_secondary_use_agriculture': [0, 1],
+            'has_secondary_use_hotel': [0, 1],
+            'has_secondary_use_rental': [0, 1],
+            'has_secondary_use_institution': [0, 1],
+            'has_secondary_use_school': [0, 1],
+            'has_secondary_use_industry': [0, 1],
+            'has_secondary_use_health_post': [0, 1],
+            'has_secondary_use_gov_office': [0, 1],
+            'has_secondary_use_use_police': [0, 1],
+            'has_secondary_use_other': [0, 1],
+        }
+
+        # Costruisci una maschera booleana: True = riga valida
+        valid_mask = (
+                dati['geo_level_1_id'].between(0, 30) &
+                dati['geo_level_2_id'].between(0, 1427) &
+                dati['geo_level_3_id'].between(0, 12567)
+        )
+
+        for col, values in valid_values.items():
+            if col in dati.columns:
+                valid_mask &= dati[col].isin(values)
+
+        righe_prima = len(dati)
+        dati = dati[valid_mask].reset_index(drop=True)
+        righe_dopo = len(dati)
+
+        print(f"Righe rimosse come outlier: {righe_prima - righe_dopo}")
+        print(f"Righe rimanenti: {righe_dopo}")
+
+        print("\nPreprocessing completato!")
+        print(dati.head())
+
+        return dati
+
+# --- 3. MAIN SCRIPT ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(current_dir, '..', 'data')
 
@@ -81,11 +199,11 @@ try:
     train_labels = scegli_opener(path_labels).open(path_labels)
 
     # MERGE
-    train_full = train_values.merge(train_labels, on='building_id')
-    print(f"File caricati e uniti. Righe totali: {train_full.shape[0]}")
+    dati = train_values.merge(train_labels, on='building_id')
+    print(f"File caricati e uniti. Righe totali: {dati.shape[0]}")
 
     # PREPROCESSING
-    preprocessor = Preprocessing(train_full)
+    preprocessor = Preprocessing(dati)
     df_processato = preprocessor.esegui()
 
     print("\n--- RESOCONTO FINALE ---")
@@ -96,108 +214,3 @@ try:
 except Exception as e:
     print(f"Errore: {e}")
 
-while n > 0:
-    print("\nDato che sono stati trovati valori mancanti, scegli un'operazione di pulizia:")
-    print("1. Eliminazione del record")
-    print("2. Imputazione univariata (media per ogni colonna numerica)")
-    print("3. Imputazione multivariata (KNN Imputer)")
-    print("4. Esci senza modifiche")
-
-    try:
-        choice = int(input("Inserisci la tua scelta (1-4): "))
-    except ValueError:
-        print("Scelta non valida. Inserisci un numero tra 1 e 4.")
-        time.sleep(1)
-        continue
-
-    if choice not in [1, 2, 3, 4]:
-        print("Scelta non valida. Riprova.")
-        time.sleep(1)
-        continue
-
-    if choice == 1:
-        train_full.dropna(inplace=True)
-        print("Righe con valori mancanti eliminate con successo!")
-
-    elif choice == 2:
-        # Imputazione con la media su tutte le colonne numeriche che hanno NaN
-        numeric_cols_with_nan = train_full.select_dtypes(include='number').columns[
-            train_full.select_dtypes(include='number').isnull().any()
-        ]
-        for col in numeric_cols_with_nan:
-            col_mean = train_full[col].mean()
-            train_full[col].fillna(col_mean, inplace=True)
-        print(f"Imputazione univariata eseguita su colonne: {list(numeric_cols_with_nan)}")
-
-    elif choice == 3:
-        from sklearn.impute import KNNImputer
-        numeric_cols = train_full.select_dtypes(include='number').columns
-        imputer = KNNImputer(n_neighbors=5)
-        train_full[numeric_cols] = imputer.fit_transform(train_full[numeric_cols])
-        print("Imputazione multivariata (KNN) eseguita con successo!")
-
-    elif choice == 4:
-        print("Uscita senza modifiche.")
-        break
-
-    # Ricalcola n dopo ogni operazione per decidere se uscire dal loop
-    n = train_full.isnull().sum().sum()
-    if n == 0:
-        print("Nessun valore mancante rimasto. Pulizia completata!")
-
-# --- 5. CONTROLLO OUTLIER ---
-print("\n--- CONTROLLO OUTLIER ---")
-
-# Valori attesi per ogni colonna categorica/binaria
-valid_values = {
-    'land_surface_condition':               ['n', 'o', 't'],
-    'foundation_type':                      ['h', 'i', 'r', 'u', 'w'],
-    'roof_type':                            ['n', 'q', 'x'],
-    'ground_floor_type':                    ['f', 'm', 'v', 'x', 'z'],
-    'other_floor_type':                     ['j', 's', 'q', 'x'],
-    'position':                             ['j', 's', 'o', 't'],
-    'plan_configuration':                   ['a', 'c', 'd', 'f', 'm', 'n', 'o', 'q', 's', 'u'],
-    'legal_ownership_status':               ['a', 'r', 'v', 'w'],
-    'has_superstructure_adobe_mud':         [0, 1],
-    'has_superstructure_mud_mortar_stone':  [0, 1],
-    'has_superstructure_stone_flag':        [0, 1],
-    'has_superstructure_cement_mortar_stone': [0, 1],
-    'has_superstructure_mud_mortar_brick':  [0, 1],
-    'has_superstructure_cement_mortar_brick': [0, 1],
-    'has_superstructure_timber':            [0, 1],
-    'has_superstructure_rc_non_engineered': [0, 1],
-    'has_superstructure_rc_engineered':     [0, 1],
-    'has_superstructure_other':             [0, 1],
-    'has_secondary_use':                    [0, 1],
-    'has_secondary_use_agriculture':        [0, 1],
-    'has_secondary_use_hotel':              [0, 1],
-    'has_secondary_use_rental':             [0, 1],
-    'has_secondary_use_institution':        [0, 1],
-    'has_secondary_use_school':             [0, 1],
-    'has_secondary_use_industry':           [0, 1],
-    'has_secondary_use_health_post':        [0, 1],
-    'has_secondary_use_gov_office':         [0, 1],
-    'has_secondary_use_use_police':         [0, 1],
-    'has_secondary_use_other':              [0, 1],
-}
-
-# Costruisci una maschera booleana: True = riga valida
-valid_mask = (
-    train_full['geo_level_1_id'].between(0, 30) &
-    train_full['geo_level_2_id'].between(0, 1427) &
-    train_full['geo_level_3_id'].between(0, 12567)
-)
-
-for col, values in valid_values.items():
-    if col in train_full.columns:
-        valid_mask &= train_full[col].isin(values)
-
-righe_prima = len(train_full)
-train_full = train_full[valid_mask].reset_index(drop=True)
-righe_dopo = len(train_full)
-
-print(f"Righe rimosse come outlier: {righe_prima - righe_dopo}")
-print(f"Righe rimanenti: {righe_dopo}")
-
-print("\nPreprocessing completato!")
-print(train_full.head())
