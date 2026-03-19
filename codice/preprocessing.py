@@ -2,6 +2,8 @@ import pandas as pd
 import os
 from abc import ABC, abstractmethod
 import time
+from sklearn.impute import KNNImputer
+
 
 # --- 1. DEFINIZIONE DELLA FACTORY ---
 class AbstractOpener(ABC):
@@ -47,7 +49,7 @@ class Preprocessing:
     Classe incaricata della pulizia e preparazione del dataset.
     Riceve il dataframe già unito e restituisce il dataframe processato.
     """
-    def __init__(self, dataframe: pd.DataFrame) -> None:
+    def __init__(self, dataframe: pd.DataFrame):
         self.df = dataframe.copy()
 
     def esegui(self) -> pd.DataFrame:
@@ -55,21 +57,21 @@ class Preprocessing:
         Punto di ingresso per tutte le operazioni di pulizia.
         """
         print("\nAvvio Preprocessing...")
-        self.df = self.elimina_duplicati(self.df)
-        self.df = self.rimuovi_outlier_strutturali(self.df)
-        self.df = self.gestisci_valori_mancanti(self.df)
+        self.elimina_duplicati()
+        self.rimuovi_outlier_strutturali()
+        self.gestisci_valori_mancanti()
         return self.df
 
     # Metodo per eliminare duplicati
-    def elimina_duplicati(self, dati):
-        dati = dati.drop_duplicates()
+    def elimina_duplicati(self):
+        dat = self.df.drop_duplicates()
         # Riassegna gli indici dopo l'eliminazione
-        dati = dati.reset_index(drop=True)
-        return dati
+        self.df = dat.reset_index(drop=True)
 
-    def gestisci_valori_mancanti(self, dati):
+    def gestisci_valori_mancanti(self):
         """Gestione interattiva dei valori nulli (NaN)."""
-        n = dati.isnull().sum().sum()
+        n = self.df.isnull().sum().sum()
+        dat = self.df.copy()
 
         while n > 0:
             print("\nDato che sono stati trovati valori mancanti, scegli un'operazione di pulizia:")
@@ -91,24 +93,23 @@ class Preprocessing:
                 continue
 
             if choice == 1:
-                dati.dropna(inplace=True)
+                dat.dropna(inplace=True)
                 print("Righe con valori mancanti eliminate con successo!")
 
             elif choice == 2:
                 # Imputazione con la media su tutte le colonne numeriche che hanno NaN
-                numeric_cols_with_nan = dati.select_dtypes(include='number').columns[
-                    dati.select_dtypes(include='number').isnull().any()
+                numeric_cols_with_nan = dat.select_dtypes(include='number').columns[
+                    dat.select_dtypes(include='number').isnull().any()
                 ]
                 for col in numeric_cols_with_nan:
-                    col_mean = dati[col].mean()
-                    dati[col].fillna(col_mean, inplace=True)
+                    col_mean = dat[col].mean()
+                    dat[col].fillna(col_mean, inplace=True)
                 print(f"Imputazione univariata eseguita su colonne: {list(numeric_cols_with_nan)}")
 
             elif choice == 3:
-                from sklearn.impute import KNNImputer
-                numeric_cols = dati.select_dtypes(include='number').columns
+                numeric_cols = dat.select_dtypes(include='number').columns
                 imputer = KNNImputer(n_neighbors=5)
-                dati[numeric_cols] = imputer.fit_transform(dati[numeric_cols])
+                dat[numeric_cols] = imputer.fit_transform(dat[numeric_cols])
                 print("Imputazione multivariata (KNN) eseguita con successo!")
 
             elif choice == 4:
@@ -116,13 +117,15 @@ class Preprocessing:
                 break
 
             # Ricalcola n dopo ogni operazione per decidere se uscire dal loop
-            n = dati.isnull().sum().sum()
+            n = dat.isnull().sum().sum()
             if n == 0:
                 print("Nessun valore mancante rimasto. Pulizia completata!")
 
-        return dati
+        # Aggiornamento del dataframe
+        self.df = dat
 
-    def rimuovi_outlier_strutturali(self, dati):
+
+    def rimuovi_outlier_strutturali(self):
         """
         Rimuove record che non rispettano i domini di valore attesi.
         Utile per pulire errori di inserimento dati.
@@ -164,26 +167,25 @@ class Preprocessing:
 
         # Costruisci una maschera booleana: True = riga valida
         valid_mask = (
-                dati['geo_level_1_id'].between(0, 30) &
-                dati['geo_level_2_id'].between(0, 1427) &
-                dati['geo_level_3_id'].between(0, 12567)
+                self.df['geo_level_1_id'].between(0, 30) &
+                self.df['geo_level_2_id'].between(0, 1427) &
+                self.df['geo_level_3_id'].between(0, 12567)
         )
 
         for col, values in valid_values.items():
-            if col in dati.columns:
-                valid_mask &= dati[col].isin(values)
+            if col in self.df.columns:
+                valid_mask &= self.df[col].isin(values)
 
-        righe_prima = len(dati)
-        dati = dati[valid_mask].reset_index(drop=True)
-        righe_dopo = len(dati)
+        righe_prima = len(self.df)
+        self.df = self.df[valid_mask].reset_index(drop=True)
+        righe_dopo = len(self.df)
 
         print(f"Righe rimosse come outlier: {righe_prima - righe_dopo}")
         print(f"Righe rimanenti: {righe_dopo}")
 
         print("\nPreprocessing completato!")
-        print(dati.head())
+        print(self.df.head())
 
-        return dati
 
 # --- 3. MAIN SCRIPT ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
