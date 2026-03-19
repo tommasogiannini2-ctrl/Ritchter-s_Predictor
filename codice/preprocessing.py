@@ -58,11 +58,13 @@ class Preprocessing:
         """
         print("\nAvvio Preprocessing...")
         self.elimina_duplicati()
-        self.elimina_classnull()
-        self.elimina_colonne_nulle()
+
         self.rimuovi_outlier_strutturali()
 
+        self.elimina_classnull()
+        self.elimina_colonne_nulle()
         self.elimina_record_null_percentuale()
+
         self.gestisci_valori_mancanti()
 
         return self.df
@@ -190,11 +192,11 @@ class Preprocessing:
         print(f"Righe rimanenti: {righe_dopo}")
 
         print("\nPreprocessing completato!")
-        print(self.df.head())
+
 
     def elimina_classnull(self):
         target_col = 'damage_grade'
-        righe_originali = self.df
+        righe_originali = self.df.shape[0]
         # Rimuove le righe dove il valore nella colonna 'damage_grade' è nullo (NaN)
         self.df = self.df.dropna(subset=[target_col]).reset_index(drop=True)
         righe_dopo_aver_tolto_i_null = len(self.df)
@@ -261,11 +263,14 @@ try:
 
     print("\n--- RESOCONTO FINALE ---")
     print(f"Dimensioni Righe: {df_processato.shape[0]}")
-    print(f"Dimensioni Colonne:  {df_processato.shape[1]}")
-    print(f"Valori mancanti residui: {df_processato.isnull().sum().sum()}")
+    print(f"Dimensioni Colonne:  {df_processato.shape[1]} \n")
+
+    print(f"Informazioni sul dataframe:")
+    df_processato.info()
+    print(f"\nValori mancanti residui: {df_processato.isnull().sum().sum()}")
 
 except Exception as ex:
     print(f"Errore: {ex}")
 
-#19 marzo righe totali e 0 null
-#File caricati e uniti. Righe totali: 260601
+# 19 marzo righe totali e 0 null
+# File caricati e uniti. Righe totali: 260601
