@@ -64,6 +64,7 @@ class Preprocessing:
         self.elimina_classnull()
         self.elimina_colonne_nulle()
         self.elimina_record_null_percentuale()
+        self.dummy()
 
         self.gestisci_valori_mancanti()
 
@@ -102,6 +103,7 @@ class Preprocessing:
 
             if choice == 1:
                 dat.dropna(inplace=True)
+                dat.reset_index(drop=True, inplace=True)
                 print("Righe con valori mancanti eliminate con successo!")
 
             elif choice == 2:
@@ -182,7 +184,8 @@ class Preprocessing:
 
         for col, values in valid_values.items():
             if col in self.df.columns:
-                valid_mask &= self.df[col].isin(values)
+                # La riga è valida se il valore è tra quelli permessi OPPURE se è nullo
+                valid_mask &= (self.df[col].isin(values) | self.df[col].isna())
 
         righe_prima = len(self.df)
         self.df = self.df[valid_mask].reset_index(drop=True)
@@ -191,7 +194,6 @@ class Preprocessing:
         print(f"Righe rimosse come outlier: {righe_prima - righe_dopo}")
         print(f"Righe rimanenti: {righe_dopo}")
 
-        print("\nPreprocessing completato!")
 
 
     def elimina_classnull(self):
@@ -212,7 +214,7 @@ class Preprocessing:
 
         dati_puliti = self.df.dropna(thresh=min_valori_validi).reset_index(drop=True)
 
-        righe_eliminate = len(dati) - len(dati_puliti)
+        righe_eliminate = len(self.df) - len(dati_puliti)
         print(f"Record eliminati per troppi null sulla riga (Soglia {soglia_percentuale * 100}%): {righe_eliminate}")
 
     def elimina_colonne_nulle(self,soglia_percentuale=0.4):
@@ -234,9 +236,26 @@ class Preprocessing:
                 f"Attenzione: Eliminate {len(colonne_da_eliminare)} feature (> {soglia_percentuale * 100}% nulli).")
             print(f"Feature rimosse: {colonne_da_eliminare}")
             # Restituiamo il dataframe senza quelle colonne
-            self.df.drop(columns=colonne_da_eliminare)
+            self.df.drop(columns=colonne_da_eliminare,inplace=True)
         else:
             print(f"Controllo Qualità: Tutte le feature rispettano la soglia del {soglia_percentuale * 100}%.")
+
+    def dummy(self):
+        """
+        Trasforma le feature categoriche in dummy variables .
+        """
+        # Lista delle feature categoriche del dataset originale
+        feature_categoriche = [
+            'land_surface_condition', 'foundation_type', 'roof_type',
+            'ground_floor_type', 'other_floor_type', 'position',
+            'plan_configuration', 'legal_ownership_status'
+        ]
+        # drop_first=False crea una colonna per OGNI categoria
+        # dtype=int serve per avere 0/1 invece di True/False
+        self.df = pd.get_dummies(self.df, columns=feature_categoriche, drop_first=False, dtype=int)
+
+        # Calcoliamo quante nuove feature sono state generate
+        nuove_colonne = [col for col in self.df.columns if any(feat in col for feat in feature_categoriche)]
 
 
 
@@ -274,3 +293,4 @@ except Exception as ex:
 
 # 19 marzo righe totali e 0 null
 # File caricati e uniti. Righe totali: 260601
+
