@@ -3,6 +3,7 @@ import os
 from abc import ABC, abstractmethod
 import time
 from sklearn.impute import KNNImputer
+from sklearn.preprocessing import StandardScaler
 
 
 # --- 1. DEFINIZIONE DELLA FACTORY ---
@@ -49,23 +50,33 @@ class Preprocessing:
     Classe incaricata della pulizia e preparazione del dataset.
     Riceve il dataframe già unito e restituisce il dataframe processato.
     """
-    def __init__(self, dataframe: pd.DataFrame):
+    def __init__(self, dataframe: pd.DataFrame, scaler=None):
         self.df = dataframe.copy()
+        # Permette di passare uno scaler pre-fittato (utile quando si processerà il test set)
+        self.scaler = scaler if scaler else StandardScaler()
 
-    def esegui(self) -> pd.DataFrame:
+    def esegui(self, is_train=True) -> pd.DataFrame:
         """
         Punto di ingresso per tutte le operazioni di pulizia.
+        :param is_train: Booleano che indica se stiamo processando il set di addestramento.
         """
         print("\nAvvio Preprocessing...")
-        self.elimina_duplicati()
+        if is_train:
+            self.elimina_duplicati()
 
         self.rimuovi_outlier_strutturali()
 
-        self.elimina_classnull()
+        if is_train:
+            self.elimina_classnull()
+            
         self.elimina_colonne_nulle()
-        self.elimina_record_null_percentuale()
+        
+        if is_train:
+            self.elimina_record_null_percentuale()
 
         self.gestisci_valori_mancanti()
+        
+        self.standardizza(is_train)
 
         return self.df
 
@@ -102,6 +113,7 @@ class Preprocessing:
 
             if choice == 1:
                 dat.dropna(inplace=True)
+                dat.reset_index(drop=True, inplace=True)
                 print("Righe con valori mancanti eliminate con successo!")
 
             elif choice == 2:
@@ -132,6 +144,22 @@ class Preprocessing:
         # Aggiornamento del dataframe
         self.df = dat
 
+    def dummy(self):
+        """
+        Trasforma le feature categoriche in dummy variables .
+        """
+        # Lista delle feature categoriche del dataset originale
+        feature_categoriche = [
+            'land_surface_condition', 'foundation_type', 'roof_type',
+            'ground_floor_type', 'other_floor_type', 'position',
+            'plan_configuration', 'legal_ownership_status'
+        ]
+        # drop_first=False crea una colonna per OGNI categoria
+        # dtype=int serve per avere 0/1 invece di True/False
+        self.df = pd.get_dummies(self.df, columns=feature_categoriche, drop_first=False, dtype=int)
+
+        # Calcoliamo quante nuove feature sono state generate
+        nuove_colonne = [col for col in self.df.columns if any(feat in col for feat in feature_categoriche)]
 
     def rimuovi_outlier_strutturali(self):
         """
@@ -182,7 +210,7 @@ class Preprocessing:
 
         for col, values in valid_values.items():
             if col in self.df.columns:
-                valid_mask &= self.df[col].isin(values)
+                valid_mask &= (self.df[col].isin(values) | self.df[col].isna())
 
         righe_prima = len(self.df)
         self.df = self.df[valid_mask].reset_index(drop=True)
@@ -197,10 +225,11 @@ class Preprocessing:
     def elimina_classnull(self):
         target_col = 'damage_grade'
         righe_originali = self.df.shape[0]
-        # Rimuove le righe dove il valore nella colonna 'damage_grade' è nullo (NaN)
-        self.df = self.df.dropna(subset=[target_col]).reset_index(drop=True)
-        righe_dopo_aver_tolto_i_null = len(self.df)
-        assert righe_dopo_aver_tolto_i_null <= righe_originali, "ERRORE: le righe dopo la pulizia sono aumentate!"
+        if target_col in self.df.columns:
+            # Rimuove le righe dove il valore nella colonna 'damage_grade' è nullo (NaN)
+            self.df = self.df.dropna(subset=[target_col]).reset_index(drop=True)
+            righe_dopo_aver_tolto_i_null = len(self.df)
+            assert righe_dopo_aver_tolto_i_null <= righe_originali, "ERRORE: le righe dopo la pulizia sono aumentate!"
 
     def elimina_record_null_percentuale(self, soglia_percentuale=0.30):
         """
@@ -212,7 +241,8 @@ class Preprocessing:
 
         dati_puliti = self.df.dropna(thresh=min_valori_validi).reset_index(drop=True)
 
-        righe_eliminate = len(dati) - len(dati_puliti)
+        righe_eliminate = len(self.df) - len(dati_puliti)
+        self.df = dati_puliti
         print(f"Record eliminati per troppi null sulla riga (Soglia {soglia_percentuale * 100}%): {righe_eliminate}")
 
     def elimina_colonne_nulle(self,soglia_percentuale=0.4):
@@ -234,43 +264,39 @@ class Preprocessing:
                 f"Attenzione: Eliminate {len(colonne_da_eliminare)} feature (> {soglia_percentuale * 100}% nulli).")
             print(f"Feature rimosse: {colonne_da_eliminare}")
             # Restituiamo il dataframe senza quelle colonne
-            self.df.drop(columns=colonne_da_eliminare)
+            self.df = self.df.drop(columns=colonne_da_eliminare,inplace=True)
         else:
             print(f"Controllo Qualità: Tutte le feature rispettano la soglia del {soglia_percentuale * 100}%.")
 
+    def standardizza(self, is_train=True):
+        """
+        Standardizza esclusivamente le feature numeriche continue (evitando di modificare ID o variabili categoriche).
+        """
+        print("\n--- STANDARDIZZAZIONE ---")
+        # Identifichiamo le variabili continue previste dal problema
+        colonne_continue = [
+            'age', 
+            'area_percentage', 
+            'height_percentage', 
+            'count_floors_pre_eq', 
+            'count_families'
+        ]
+        
+        # Filtriamo le colonne per accertarci che siano presenti nel dataframe
+        colonne_da_standardizzare = [col for col in colonne_continue if col in self.df.columns]
+        
+        if not colonne_da_standardizzare:
+            print("Nessuna colonna continua trovata per la standardizzazione.")
+            return
 
-
-# --- 3. MAIN SCRIPT ---
-current_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(current_dir, '..', 'data')
-
-try:
-    path_values = os.path.join(data_dir, 'train_values.csv')
-    path_labels = os.path.join(data_dir, 'train_labels.csv')
-
-    # CARICAMENTO
-    print("Caricamento file in corso...")
-    train_values = scegli_opener(path_values).open(path_values)
-    train_labels = scegli_opener(path_labels).open(path_labels)
-
-    # MERGE
-    dati = train_values.merge(train_labels, on='building_id')
-    print(f"File caricati e uniti. Righe totali: {dati.shape[0]}")
-
-    # PREPROCESSING
-    preprocessor = Preprocessing(dati)
-    df_processato = preprocessor.esegui()
-
-    print("\n--- RESOCONTO FINALE ---")
-    print(f"Dimensioni Righe: {df_processato.shape[0]}")
-    print(f"Dimensioni Colonne:  {df_processato.shape[1]} \n")
-
-    print(f"Informazioni sul dataframe:")
-    df_processato.info()
-    print(f"\nValori mancanti residui: {df_processato.isnull().sum().sum()}")
-
-except Exception as ex:
-    print(f"Errore: {ex}")
-
-# 19 marzo righe totali e 0 null
-# File caricati e uniti. Righe totali: 260601
+        if is_train:
+            # Per i dati di Train calcoliamo (fit) e applichiamo (transform) la standardizzazione
+            self.df[colonne_da_standardizzare] = self.scaler.fit_transform(self.df[colonne_da_standardizzare])
+            print(f"Standardizzazione calcolata e applicata (fit_transform) su: {colonne_da_standardizzare}")
+        else:
+            # Per i dati di Test applichiamo (transform) le metriche calcolate precedentemente sul Train per evitare Data Leakage
+            self.df[colonne_da_standardizzare] = self.scaler.transform(self.df[colonne_da_standardizzare])
+            print(f"Standardizzazione applicata (transform) su: {colonne_da_standardizzare}")
+            
+        print("\nEsempio di valori standardizzati (prime 5 righe delle colonne modificate):")
+        print(self.df[colonne_da_standardizzare].head())
