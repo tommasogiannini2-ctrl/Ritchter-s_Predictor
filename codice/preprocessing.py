@@ -264,7 +264,7 @@ class Preprocessing:
                 f"Attenzione: Eliminate {len(colonne_da_eliminare)} feature (> {soglia_percentuale * 100}% nulli).")
             print(f"Feature rimosse: {colonne_da_eliminare}")
             # Restituiamo il dataframe senza quelle colonne
-            self.df = self.df.drop(columns=colonne_da_eliminare,inplace=True)
+            self.df.drop(columns=colonne_da_eliminare, inplace=True)
         else:
             print(f"Controllo Qualità: Tutte le feature rispettano la soglia del {soglia_percentuale * 100}%.")
 
