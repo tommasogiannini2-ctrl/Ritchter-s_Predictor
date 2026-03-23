@@ -219,7 +219,7 @@ class Preprocessing:
         print(f"Righe rimosse come outlier: {righe_prima - righe_dopo}")
         print(f"Righe rimanenti: {righe_dopo}")
 
-        print("\nPreprocessing completato!")
+
 
 
     def elimina_classnull(self):
