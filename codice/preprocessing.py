@@ -5,7 +5,6 @@ import time
 from sklearn.impute import KNNImputer
 from sklearn.preprocessing import StandardScaler
 
-
 # --- 1. DEFINIZIONE DELLA FACTORY ---
 class AbstractOpener(ABC):
     def open(self, dataframe_path: str) -> pd.DataFrame:
@@ -65,6 +64,7 @@ class Preprocessing:
             self.elimina_duplicati()
 
         self.rimuovi_outlier_strutturali()
+        self.pulisci_variabili()
 
         if is_train:
             self.elimina_classnull()
@@ -75,7 +75,8 @@ class Preprocessing:
             self.elimina_record_null_percentuale()
 
         self.gestisci_valori_mancanti()
-        
+
+        self.dummy()
         self.standardizza(is_train)
 
         return self.df
@@ -161,6 +162,36 @@ class Preprocessing:
         # Calcoliamo quante nuove feature sono state generate
         nuove_colonne = [col for col in self.df.columns if any(feat in col for feat in feature_categoriche)]
 
+    def pulisci_variabili(self):
+        """
+        Controlla e corregge i range delle variabili numeriche continue.
+        """
+        print("\n--- CONTROLLO VALORI NUMERICI ---")
+
+        if 'age' in self.df.columns:
+            mask_outlier = (self.df['age'] > 100)
+            n_outliers = mask_outlier.sum()
+
+            # Sostituiamo con NaN per l'imputazione successiva
+            self.df.loc[mask_outlier, 'age'] = pd.NA
+            print(f"Age: {n_outliers} record convertiti in NaN.")
+
+        if 'count_floors_pre_eq' in self.df.columns:
+            mask_piani = (self.df['count_floors_pre_eq'] > 15) | (self.df['count_floors_pre_eq'] <= 0)
+            self.df.loc[mask_piani, 'count_floors_pre_eq'] = pd.NA
+            print(f"Floors: {mask_piani.sum()} valori fuori range corretti.")
+
+        for col in ['area_percentage', 'height_percentage']:
+            if col in self.df.columns:
+                mask = (self.df[col] <= 0) | (self.df[col] > 100)
+                self.df.loc[mask, col] = pd.NA
+                print(f"{col}: {mask.sum()} valori fuori range (<=0 o >100) corretti.")
+
+        if 'count_families' in self.df.columns:
+            mask_fam = self.df['count_families'] < 0
+            self.df.loc[mask_fam, 'count_families'] = pd.NA
+            print(f"Families: {mask_fam.sum()} valori negativi corretti.")
+
     def rimuovi_outlier_strutturali(self):
         """
         Rimuove record che non rispettano i domini di valore attesi.
@@ -219,9 +250,6 @@ class Preprocessing:
         print(f"Righe rimosse come outlier: {righe_prima - righe_dopo}")
         print(f"Righe rimanenti: {righe_dopo}")
 
-        print("\nPreprocessing completato!")
-
-
     def elimina_classnull(self):
         target_col = 'damage_grade'
         righe_originali = self.df.shape[0]
@@ -264,7 +292,7 @@ class Preprocessing:
                 f"Attenzione: Eliminate {len(colonne_da_eliminare)} feature (> {soglia_percentuale * 100}% nulli).")
             print(f"Feature rimosse: {colonne_da_eliminare}")
             # Restituiamo il dataframe senza quelle colonne
-            self.df = self.df.drop(columns=colonne_da_eliminare,inplace=True)
+            self.df.drop(columns=colonne_da_eliminare, inplace=True)
         else:
             print(f"Controllo Qualità: Tutte le feature rispettano la soglia del {soglia_percentuale * 100}%.")
 

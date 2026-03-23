@@ -1,5 +1,6 @@
 import os
 from preprocessing import Preprocessing, scegli_opener
+from data_reduction import DataReducer
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,6 +23,12 @@ if __name__ == "__main__":
         dati_train = train_values.merge(train_labels, on='building_id')
         print(f"File caricati e uniti. Righe totali: {dati_train.shape[0]}")
 
+        # --- DATA REDUCTION ---
+        #data reduction utilizzato solo per il train set per alleggerire l'onere computazionale, senza intaccare il test per ottimizzazione delle metriche
+        reducer = DataReducer(dati_train)
+        dati_train = reducer.interfaccia_utente()
+
+
         # PREPROCESSING TRAIN SET
         preprocessor = Preprocessing(dati_train)
         df_train_processato = preprocessor.esegui(is_train=True)
@@ -32,11 +39,11 @@ if __name__ == "__main__":
         print("Informazioni sul dataframe:")
         df_train_processato.info()
         print(f"\nValori mancanti residui: {df_train_processato.isnull().sum().sum()}")
-        
+
         # SALVATAGGIO FILE TRAINING PROCESSATO
         output_train_path = os.path.join(output_dir, 'train_processato.csv')
         df_train_processato.to_csv(output_train_path, index=False)
-        print(f"\n✅ File di training processato salvato in: {output_train_path}")
+        print(f"\n File di training processato salvato in: {output_train_path}")
 
         # PREPROCESSING TEST SET
         path_test_values = os.path.join(data_dir, 'Test_Values.csv')
@@ -55,7 +62,7 @@ if __name__ == "__main__":
             # SALVATAGGIO FILE TEST PROCESSATO
             output_test_path = os.path.join(output_dir, 'test_processato.csv')
             df_test_processato.to_csv(output_test_path, index=False)
-            print(f"✅ File di test processato salvato in: {output_test_path}")
+            print(f" File di test processato salvato in: {output_test_path}")
 
     except Exception as ex:
         print(f"Errore: {ex}")
