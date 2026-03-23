@@ -169,7 +169,7 @@ class Preprocessing:
         print("\n--- CONTROLLO VALORI NUMERICI ---")
 
         if 'age' in self.df.columns:
-            mask_outlier = (self.df['age'] > 100)
+            mask_outlier = (self.df['age'] > 800) | (self.df['age'] < 0)
             n_outliers = mask_outlier.sum()
 
             # Sostituiamo con NaN per l'imputazione successiva
