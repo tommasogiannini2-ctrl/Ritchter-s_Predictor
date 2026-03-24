@@ -49,34 +49,33 @@ class Preprocessing:
     Classe incaricata della pulizia e preparazione del dataset.
     Riceve il dataframe già unito e restituisce il dataframe processato.
     """
-    def __init__(self, dataframe: pd.DataFrame, scaler=None):
+    def __init__(self, dataframe: pd.DataFrame, scaler=None, lista_colonne=None):
         self.df = dataframe.copy()
         # Permette di passare uno scaler pre-fittato (utile quando si processerà il test set)
         self.scaler = scaler if scaler else StandardScaler()
+        self.lista_colonne = lista_colonne if lista_colonne else []
 
     def esegui(self, is_train=True) -> pd.DataFrame:
-        """
-        Punto di ingresso per tutte le operazioni di pulizia.
-        :param is_train: Booleano che indica se stiamo processando il set di addestramento.
-        """
-        print("\nAvvio Preprocessing...")
-        if is_train:
-            self.elimina_duplicati()
+        print(f"\nAvvio Preprocessing ({'Train' if is_train else 'Test'})...")
 
-        self.rimuovi_outlier_strutturali()
+        self.elimina_duplicati()
         self.pulisci_variabili()
+        self.elimina_classnull()
 
-        if is_train:
-            self.elimina_classnull()
-            
-        self.elimina_colonne_nulle()
-        
         if is_train:
             self.elimina_record_null_percentuale()
+            self.elimina_colonne_nulle()
+            self.gestisci_valori_mancanti()
+            self.dummy()
 
-        self.gestisci_valori_mancanti()
+            self.lista_colonne = self.df.columns.tolist()
 
-        self.dummy()
+        else:
+            self.gestisci_valori_mancanti()
+            self.dummy()
+
+            self.df = self.df.reindex(columns=self.lista_colonne, fill_value=0)
+
         self.standardizza(is_train)
 
         return self.df
@@ -124,7 +123,7 @@ class Preprocessing:
                 ]
                 for col in numeric_cols_with_nan:
                     col_mean = dat[col].mean()
-                    dat[col].fillna(col_mean, inplace=True)
+                    dat[col] = dat[col].fillna(col_mean)
                 print(f"Imputazione univariata eseguita su colonne: {list(numeric_cols_with_nan)}")
 
             elif choice == 3:
@@ -160,7 +159,8 @@ class Preprocessing:
         self.df = pd.get_dummies(self.df, columns=feature_categoriche, drop_first=False, dtype=int)
 
         # Calcoliamo quante nuove feature sono state generate
-        nuove_colonne = [col for col in self.df.columns if any(feat in col for feat in feature_categoriche)]
+        nuove_colonne = [col for col in self.df.columns if any(feat in col for feat in feature_categoriche) and col not in feature_categoriche]
+        print(f"Aggiunte {len(nuove_colonne)} nuove colonne dummy.")
 
     def pulisci_variabili(self):
         """

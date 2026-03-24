@@ -40,6 +40,7 @@ if __name__ == "__main__":
         df_train_processato.info()
         print(f"\nValori mancanti residui: {df_train_processato.isnull().sum().sum()}")
 
+
         # SALVATAGGIO FILE TRAINING PROCESSATO
         output_train_path = os.path.join(output_dir, 'train_processato.csv')
         df_train_processato.to_csv(output_train_path, index=False)
@@ -52,7 +53,7 @@ if __name__ == "__main__":
             test_values = scegli_opener(path_test_values).open(path_test_values)
 
             # Esecuzione preprocessing sul test set usando lo scaler del train
-            preprocessor_test = Preprocessing(test_values, scaler=preprocessor.scaler)
+            preprocessor_test = Preprocessing(test_values, scaler=preprocessor.scaler, lista_colonne=preprocessor.lista_colonne)
             df_test_processato = preprocessor_test.esegui(is_train=False)
 
             print("\n--- RESOCONTO FINALE TEST ---")
