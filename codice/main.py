@@ -24,10 +24,9 @@ if __name__ == "__main__":
         print(f"File caricati e uniti. Righe totali: {dati_train.shape[0]}")
 
         # --- DATA REDUCTION ---
-        #data reduction utilizzato solo per il train set per alleggerire l'onere computazionale, senza intaccare il test per ottimizzazione delle metriche
+        # data reduction utilizzato solo per il train set per alleggerire l'onere computazionale
         reducer = DataReducer(dati_train)
         dati_train = reducer.interfaccia_utente()
-
 
         # PREPROCESSING TRAIN SET
         preprocessor = Preprocessing(dati_train, is_train=True)
@@ -39,7 +38,6 @@ if __name__ == "__main__":
         print("Informazioni sul dataframe:")
         df_train_processato.info()
         print(f"\nValori mancanti residui: {df_train_processato.isnull().sum().sum()}")
-
 
         # SALVATAGGIO FILE TRAINING PROCESSATO
         output_train_path = os.path.join(output_dir, 'train_processato.csv')
